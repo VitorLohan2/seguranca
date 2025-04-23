@@ -1,0 +1,491 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sistema de Ronda</title>
+    <style>
+        body { font-family: Arial, sans-serif; max-width: 1000px; margin: 0 auto; padding: 20px; }
+        .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+        .container { display: flex; flex-wrap: wrap; justify-content: space-between; margin-bottom: 20px; }
+        .ponto { width: 30%; border: 1px solid #ccc; padding: 15px; text-align: center; margin-bottom: 20px; }
+        .selecionar-seguranca { margin-bottom: 20px; padding: 10px; background: #f5f5f5; border-radius: 5px; }
+        select, button { padding: 10px 15px; margin: 5px; }
+        button { background-color: #4CAF50; color: white; border: none; cursor: pointer; }
+        button:disabled { background-color: #cccccc; }
+        button:hover:not(:disabled) { background-color: #45a049; }
+        .log { margin-top: 20px; border: 1px solid #ddd; padding: 10px; max-height: 400px; overflow-y: auto; }
+        .status { margin-top: 10px; font-weight: bold; }
+        .coordenadas { font-size: 12px; color: #666; margin-top: 5px; }
+        #map { height: 400px; width: 100%; margin-top: 20px; border: 1px solid #ddd; }
+        .registro-ronda { 
+            margin-bottom: 10px; 
+            padding: 12px; 
+            border-bottom: 1px solid #eee; 
+            background-color: #f9f9f9;
+            border-radius: 5px;
+        }
+        .seguranca-info { 
+            font-weight: bold; 
+            color: #2c3e50;
+            font-size: 1.1em;
+        }
+        .ponto-info {
+            color: #e74c3c;
+            font-weight: bold;
+        }
+        .data-hora {
+            color: #7f8c8d;
+            font-size: 0.9em;
+        }
+        .detalhes {
+            margin-top: 8px;
+            font-size: 0.9em;
+            color: #34495e;
+        }
+        .detalhes span {
+            display: inline-block;
+            margin-right: 10px;
+        }
+        .filtros {
+            background-color: #ecf0f1;
+            padding: 10px;
+            margin-bottom: 15px;
+            border-radius: 5px;
+        }
+    </style>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
+</head>
+<body>
+    <div class="header">
+        <h1>Sistema de Ronda</h1>
+        <div id="geoStatus" class="status">Obtendo localização...</div>
+    </div>
+    
+    <div class="selecionar-seguranca">
+        <label for="segurancaSelect">Segurança: </label>
+        <select id="segurancaSelect">
+            <option value="">Selecione um segurança</option>
+        </select>
+        <div id="currentPosition" class="coordenadas"></div>
+    </div>
+    
+    <div class="container">
+        <div class="ponto" id="ponto1">
+            <h2>Ponto 1</h2>
+            <p id="nomePonto1">Entrada Principal</p>
+            <div class="coordenadas" id="coordsPonto1">Coordenadas: -22.884456, -43.517322</div>
+            <button onclick="verificarLocalizacao(1)" id="btnPonto1" disabled>Registrar Ronda</button>
+            <p id="ultima1">Nenhuma ronda registrada</p>
+            <div id="statusPonto1" class="status"></div>
+        </div>
+        
+        <div class="ponto" id="ponto2">
+            <h2>Ponto 2</h2>
+            <p id="nomePonto2">Área de Estacionamento</p>
+            <div class="coordenadas" id="coordsPonto2">Coordenadas: -23.5510, -46.6325</div>
+            <button onclick="verificarLocalizacao(2)" id="btnPonto2" disabled>Registrar Ronda</button>
+            <p id="ultima2">Nenhuma ronda registrada</p>
+            <div id="statusPonto2" class="status"></div>
+        </div>
+        
+        <div class="ponto" id="ponto3">
+            <h2>Ponto 3</h2>
+            <p id="nomePonto3">Área Interna</p>
+            <div class="coordenadas" id="coordsPonto3">Coordenadas: -23.5500, -46.6320</div>
+            <button onclick="verificarLocalizacao(3)" id="btnPonto3" disabled>Registrar Ronda</button>
+            <p id="ultima3">Nenhuma ronda registrada</p>
+            <div id="statusPonto3" class="status"></div>
+        </div>
+    </div>
+    
+    <div id="map"></div>
+    
+    <div class="filtros">
+        <h3>Filtrar Histórico</h3>
+        <div>
+            <label for="filtroSeguranca">Segurança: </label>
+            <select id="filtroSeguranca">
+                <option value="">Todos</option>
+            </select>
+            
+            <label for="filtroPonto" style="margin-left: 15px;">Ponto: </label>
+            <select id="filtroPonto">
+                <option value="">Todos</option>
+                <option value="1">Ponto 1</option>
+                <option value="2">Ponto 2</option>
+                <option value="3">Ponto 3</option>
+            </select>
+            
+            <label for="filtroData" style="margin-left: 15px;">Data: </label>
+            <input type="date" id="filtroData">
+            
+            <button onclick="aplicarFiltros()" style="margin-left: 15px;">Aplicar</button>
+            <button onclick="limparFiltros()">Limpar</button>
+        </div>
+    </div>
+    
+    <h2>Histórico de Rondas</h2>
+    <div class="log" id="logRondas"></div>
+    
+    <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
+    <script>
+        // Dados iniciais
+        const segurancas = [
+            { id: 1, nome: "João Silva" },
+            { id: 2, nome: "Maria Santos" },
+            { id: 3, nome: "Carlos Oliveira" },
+            { id: 4, nome: "Ana Pereira" },
+            { id: 5, nome: "Paulo Costa" }
+        ];
+        
+        // Configuração fixa dos pontos (sem edição)
+        const pontos = {
+            1: { nome: "Entrada Principal", coords: [-22.884456, -43.517322], raio: 1000 },
+            2: { nome: "Área de Estacionamento", coords: [-23.5510, -46.6325], raio: 70 },
+            3: { nome: "Área Interna", coords: [-23.5500, -46.6320], raio: 40 }
+        };
+        
+        let historicoRondas = JSON.parse(localStorage.getItem('historicoRondas')) || [];
+        let segurancasData = JSON.parse(localStorage.getItem('segurancasData')) || segurancas;
+        let currentPosition = null;
+        let segurancaSelecionado = null;
+        let map = null;
+        let userMarker = null;
+        let watchId = null;
+        let pontoMarkers = {};
+        let pontoCircles = {};
+        
+        // Inicializa o mapa
+        function initMap() {
+            map = L.map('map').setView([-22.884456, -43.517322], 20);
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+            }).addTo(map);
+            
+            // Adiciona marcadores para cada ponto
+            Object.keys(pontos).forEach(pontoId => {
+                const ponto = pontos[pontoId];
+                
+                pontoMarkers[pontoId] = L.circleMarker(ponto.coords, {
+                    radius: 8,
+                    fillColor: "#ff7800",
+                    color: "#000",
+                    weight: 1,
+                    opacity: 1,
+                    fillOpacity: 0.8
+                }).addTo(map).bindPopup(`<b>${ponto.nome}</b><br>Raio: ${ponto.raio}m`);
+                
+                pontoCircles[pontoId] = L.circle(ponto.coords, ponto.raio, {
+                    color: 'blue',
+                    fillColor: '#1e90ff',
+                    fillOpacity: 0.2
+                }).addTo(map);
+            });
+        }
+        
+        // Inicia o monitoramento de geolocalização
+        function startGeoTracking() {
+            if (navigator.geolocation) {
+                watchId = navigator.geolocation.watchPosition(
+                    position => {
+                        const { latitude, longitude } = position.coords;
+                        currentPosition = { lat: latitude, lng: longitude };
+                        
+                        document.getElementById('geoStatus').textContent = "Localização obtida";
+                        document.getElementById('currentPosition').textContent = 
+                            `Posição atual: Lat ${latitude.toFixed(6)}, Lng ${longitude.toFixed(6)}`;
+                        
+                        // Atualiza o mapa
+                        if (!userMarker) {
+                            userMarker = L.marker([latitude, longitude], {
+                                icon: L.divIcon({className: 'user-marker', html: '📍'})
+                            }).addTo(map).bindPopup("Você está aqui");
+                        } else {
+                            userMarker.setLatLng([latitude, longitude]);
+                        }
+                        
+                        map.panTo([latitude, longitude]);
+                        
+                        // Ativa os botões se um segurança estiver selecionado
+                        if (segurancaSelecionado) {
+                            [1, 2, 3].forEach(pontoId => {
+                                document.getElementById(`btnPonto${pontoId}`).disabled = false;
+                            });
+                        }
+                        
+                        // Verifica proximidade automaticamente
+                        verificarProximidadeTodosPontos();
+                    },
+                    error => {
+                        let errorMessage;
+                        switch(error.code) {
+                            case error.PERMISSION_DENIED:
+                                errorMessage = "Permissão de localização negada. Ative para usar o sistema.";
+                                break;
+                            case error.POSITION_UNAVAILABLE:
+                                errorMessage = "Informação de localização indisponível.";
+                                break;
+                            case error.TIMEOUT:
+                                errorMessage = "Tempo de solicitação de localização esgotado.";
+                                break;
+                            default:
+                                errorMessage = "Erro desconhecido ao obter localização.";
+                        }
+                        document.getElementById('geoStatus').textContent = errorMessage;
+                    },
+                    { enableHighAccuracy: true, maximumAge: 10000, timeout: 5000 }
+                );
+            } else {
+                document.getElementById('geoStatus').textContent = "Geolocalização não suportada pelo navegador";
+            }
+        }
+        
+        // Calcula distância entre duas coordenadas em metros
+        function calcularDistancia(lat1, lon1, lat2, lon2) {
+            const R = 6371e3; // Raio da Terra em metros
+            const φ1 = lat1 * Math.PI/180;
+            const φ2 = lat2 * Math.PI/180;
+            const Δφ = (lat2-lat1) * Math.PI/180;
+            const Δλ = (lon2-lon1) * Math.PI/180;
+            
+            const a = Math.sin(Δφ/2) * Math.sin(Δφ/2) +
+                      Math.cos(φ1) * Math.cos(φ2) *
+                      Math.sin(Δλ/2) * Math.sin(Δλ/2);
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+            
+            return R * c;
+        }
+        
+        // Verifica proximidade com todos os pontos
+        function verificarProximidadeTodosPontos() {
+            if (!currentPosition) return;
+            
+            Object.keys(pontos).forEach(pontoId => {
+                const ponto = pontos[pontoId];
+                const distancia = calcularDistancia(
+                    currentPosition.lat, currentPosition.lng,
+                    ponto.coords[0], ponto.coords[1]
+                );
+                
+                const statusElement = document.getElementById(`statusPonto${pontoId}`);
+                if (distancia <= ponto.raio) {
+                    statusElement.textContent = "No local ✅";
+                    statusElement.style.color = "green";
+                } else {
+                    statusElement.textContent = `Fora do raio (${Math.round(distancia)}m)`;
+                    statusElement.style.color = "red";
+                }
+            });
+        }
+        
+        // Verifica localização antes de registrar
+        function verificarLocalizacao(pontoId) {
+            if (!currentPosition) {
+                alert("Localização não disponível. Aguarde...");
+                return;
+            }
+            
+            if (!segurancaSelecionado) {
+                alert("Selecione um segurança primeiro");
+                return;
+            }
+            
+            const ponto = pontos[pontoId];
+            const distancia = calcularDistancia(
+                currentPosition.lat, currentPosition.lng,
+                ponto.coords[0], ponto.coords[1]
+            );
+            
+            if (distancia > ponto.raio) {
+                alert(`Você está a ${Math.round(distancia)}m do ponto ${ponto.nome}. Aproxime-se para registrar.`);
+                return;
+            }
+            
+            registrarRonda(pontoId);
+        }
+        
+        // Registra a ronda
+        function registrarRonda(pontoId) {
+            const agora = new Date();
+            const dataHora = agora.toLocaleString();
+            const ponto = pontos[pontoId];
+            
+            document.getElementById(`ultima${pontoId}`).textContent = `Última: ${dataHora} (${segurancaSelecionado.nome})`;
+            
+            const registro = {
+                ponto: pontoId,
+                nomePonto: ponto.nome,
+                segurancaId: segurancaSelecionado.id,
+                segurancaNome: segurancaSelecionado.nome,
+                dataHora: dataHora,
+                dataISO: agora.toISOString(),
+                timestamp: agora.getTime(),
+                coordenadasSeguranca: { ...currentPosition },
+                coordenadasPonto: { lat: ponto.coords[0], lng: ponto.coords[1] },
+                distancia: calcularDistancia(
+                    currentPosition.lat, currentPosition.lng,
+                    ponto.coords[0], ponto.coords[1]
+                )
+            };
+            
+            historicoRondas.push(registro);
+            salvarDados();
+            
+            atualizarLog();
+            
+            // Feedback visual
+            const pontoElement = document.getElementById(`ponto${pontoId}`);
+            pontoElement.style.backgroundColor = '#e6ffe6';
+            setTimeout(() => {
+                pontoElement.style.backgroundColor = '';
+            }, 1000);
+        }
+        
+        // Salva todos os dados no localStorage
+        function salvarDados() {
+            localStorage.setItem('historicoRondas', JSON.stringify(historicoRondas));
+            localStorage.setItem('segurancasData', JSON.stringify(segurancasData));
+        }
+        
+        // Atualiza o log de histórico
+        function atualizarLog(filtros = {}) {
+            const logElement = document.getElementById('logRondas');
+            logElement.innerHTML = '';
+            
+            let registrosFiltrados = [...historicoRondas];
+            
+            // Aplicar filtros
+            if (filtros.segurancaId) {
+                registrosFiltrados = registrosFiltrados.filter(r => r.segurancaId == filtros.segurancaId);
+            }
+            
+            if (filtros.pontoId) {
+                registrosFiltrados = registrosFiltrados.filter(r => r.ponto == filtros.pontoId);
+            }
+            
+            if (filtros.data) {
+                const dataFiltro = new Date(filtros.data);
+                registrosFiltrados = registrosFiltrados.filter(r => {
+                    const dataRegistro = new Date(r.dataISO).toDateString();
+                    return dataRegistro === dataFiltro.toDateString();
+                });
+            }
+            
+            // Ordenar por data/hora (mais recente primeiro)
+            registrosFiltrados.sort((a, b) => b.timestamp - a.timestamp);
+            
+            if (registrosFiltrados.length === 0) {
+                logElement.innerHTML = '<p>Nenhum registro encontrado com os filtros aplicados.</p>';
+                return;
+            }
+            
+            registrosFiltrados.forEach(registro => {
+                const registroElement = document.createElement('div');
+                registroElement.className = 'registro-ronda';
+                
+                const dataHora = registro.dataHora.split(', ');
+                const data = dataHora[0];
+                const hora = dataHora[1];
+                
+                registroElement.innerHTML = `
+                    <div>
+                        <span class="seguranca-info">${registro.segurancaNome}</span> 
+                        registrou ronda na 
+                        <span class="ponto-info">${registro.nomePonto}</span>
+                    </div>
+                    <div class="data-hora">
+                        ${data} às ${hora}
+                    </div>
+                    <div class="detalhes">
+                        <span title="Local do segurança">
+                            <strong>Posição:</strong> 
+                            ${registro.coordenadasSeguranca.lat.toFixed(6)}, ${registro.coordenadasSeguranca.lng.toFixed(6)}
+                        </span>
+                        <span title="Distância do ponto">
+                            <strong>Distância:</strong> 
+                            ${Math.round(registro.distancia)}m
+                        </span>
+                    </div>
+                `;
+                logElement.appendChild(registroElement);
+            });
+        }
+        
+        // Carrega os seguranças no select
+        function carregarSegurancas() {
+            const select = document.getElementById('segurancaSelect');
+            const filtroSelect = document.getElementById('filtroSeguranca');
+            
+            select.innerHTML = '<option value="">Selecione um segurança</option>';
+            filtroSelect.innerHTML = '<option value="">Todos</option>';
+            
+            segurancasData.forEach(seguranca => {
+                const option = document.createElement('option');
+                option.value = seguranca.id;
+                option.textContent = seguranca.nome;
+                select.appendChild(option);
+                
+                const optionFiltro = option.cloneNode(true);
+                filtroSelect.appendChild(optionFiltro);
+            });
+            
+            select.addEventListener('change', (e) => {
+                const id = parseInt(e.target.value);
+                segurancaSelecionado = segurancasData.find(s => s.id === id) || null;
+                
+                // Ativa/desativa botões
+                [1, 2, 3].forEach(pontoId => {
+                    document.getElementById(`btnPonto${pontoId}`).disabled = !segurancaSelecionado || !currentPosition;
+                });
+            });
+        }
+        
+        // Aplica filtros ao histórico
+        function aplicarFiltros() {
+            const filtroSeguranca = document.getElementById('filtroSeguranca').value;
+            const filtroPonto = document.getElementById('filtroPonto').value;
+            const filtroData = document.getElementById('filtroData').value;
+            
+            const filtros = {};
+            if (filtroSeguranca) filtros.segurancaId = parseInt(filtroSeguranca);
+            if (filtroPonto) filtros.pontoId = filtroPonto;
+            if (filtroData) filtros.data = filtroData;
+            
+            atualizarLog(filtros);
+        }
+        
+        // Limpa filtros
+        function limparFiltros() {
+            document.getElementById('filtroSeguranca').value = '';
+            document.getElementById('filtroPonto').value = '';
+            document.getElementById('filtroData').value = '';
+            atualizarLog();
+        }
+        
+        // Inicialização
+        document.addEventListener('DOMContentLoaded', () => {
+            initMap();
+            startGeoTracking();
+            carregarSegurancas();
+            
+            // Carrega histórico
+            if (historicoRondas.length > 0) {
+                const ultimas = {};
+                historicoRondas.forEach(registro => {
+                    if (!ultimas[registro.ponto] || registro.timestamp > ultimas[registro.ponto].timestamp) {
+                        ultimas[registro.ponto] = registro;
+                    }
+                });
+                
+                Object.keys(ultimas).forEach(pontoId => {
+                    document.getElementById(`ultima${pontoId}`).textContent = 
+                        `Última: ${ultimas[pontoId].dataHora} (${ultimas[pontoId].segurancaNome})`;
+                });
+                
+                atualizarLog();
+            }
+        });
+    </script>
+</body>
+</html>
